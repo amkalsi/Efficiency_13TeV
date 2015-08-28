@@ -293,7 +293,7 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 					if(deltaR(myMuon->p4(), myTau->p4()) <= 0.5) continue; 
 					if(!(myMuon->charge() * myTau->charge() == -1)) continue;
 					float myMT =  mTCalculation(*myMuon,MEt);
-					if(myMT < 40. ) continue; 
+					if(myMT >= 40. ) continue; 
 					float PZETA = PZeta(*myMuon, *myTau, MEt);
 					float PZETAvis = PZetaVis(*myMuon, *myTau);
 					if(PZETA - 3.1*PZETAvis < -50) continue; 
