@@ -47,6 +47,7 @@ Implementation:
 #include "DataFormats/PatCandidates/interface/Photon.h"
 #include "DataFormats/PatCandidates/interface/Jet.h"
 #include "DataFormats/PatCandidates/interface/MET.h"
+#include "DataFormats/Math/interface/normalizedPhi.h"                                                                                                         
 
 using namespace std;
 using namespace pat;
@@ -74,11 +75,13 @@ class TriggerEff : public edm::EDAnalyzer {
 		//virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
 
 		// ----------member data ---------------------------
-
+		bool isMC;
 		string HLTPath1, HLTFilter1;
 		string HLTPath2, HLTFilter2a,HLTFilter2b,HLTFilter2c,HLTFilter2d;                                                        
-		string HLTPath3 , HLTFilter3a, HLTFilter3b;	
+		string HLTPath3 , HLTFilter3a, HLTFilter3b;
+		string HLTPath4 , HLTFilter4a, HLTFilter4b;  	
 		edm::InputTag triggerResultsTag_;
+		string isowp;
 		TLorentzVector genmuinfo, gentauinfo;
 		const reco::Candidate* GetLastCopy (const reco::Candidate* part);
 		int GetTauDecay (const reco::Candidate* part);
@@ -102,7 +105,12 @@ class TriggerEff : public edm::EDAnalyzer {
 		TH1F *hFillPtDen;
 		TH1F *hFillPtNum;
 		TH1F *hFillEtaDen;
-		TH1F *hFillEtaNum; 
+		TH1F *hFillEtaNum;
+		TH1F *hNumberOfMuons, *hNumberOftaus;
+		TH1F *hFillEventTotal, *hFillEventMuon, *hFillEventTau;
+		TH1F *hmuonid, *hmuoniso, *htauid, *hchargereq, *hmtcut, *hpzeta, *hmuonmatch, *htaumatch1, *htaumatch2;
+
+
 };
 
 //
@@ -121,6 +129,8 @@ TriggerEff::TriggerEff(const edm::ParameterSet& iConfig)
 {
 	//now do what ever initialization is needed
 	triggerResultsTag_  = iConfig.getParameter<edm::InputTag>("triggerResults");
+	isowp  = iConfig.getParameter<string>("isolation");
+	isMC  = iConfig.getParameter<bool>("isMC");
 }
 
 
@@ -147,7 +157,6 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	edm::Handle<pat::TriggerObjectStandAloneCollection> triggerObjects;
 
 	edm::Handle<pat::PackedTriggerPrescales> triggerPrescales;
-	edm::Handle<edm::View<reco::GenParticle> > pruned;
 	edm::Handle<pat::MuonCollection> muons;
 	edm::Handle<pat::TauCollection> taus;
 	edm::Handle<pat::METCollection> met;
@@ -159,11 +168,9 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	iEvent.getByLabel(triggerResultsTag_, triggerBits);
 	iEvent.getByLabel("selectedPatTrigger", triggerObjects);
 	iEvent.getByLabel("patTrigger", triggerPrescales);
-	iEvent.getByLabel("prunedGenParticles",pruned);
 	edm::Handle<reco::VertexCollection> vtx_h;
 	iEvent.getByLabel("offlineSlimmedPrimaryVertices", vtx_h);
 	const pat::MET &MEt = met->front();
-
 
 	reco::VertexCollection::const_iterator firstGoodVertex = vtx_h->end();
 	for (reco::VertexCollection::const_iterator it = vtx_h->begin(); it != firstGoodVertex; it++)
@@ -176,14 +183,16 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	if (firstGoodVertex == vtx_h->end()) return;
 
 	const edm::TriggerNames &names = iEvent.triggerNames(*triggerBits);
-//	std::cout << "\n === TRIGGER PATHS === " << std::endl;
-//	for (unsigned int i = 0, n = triggerBits->size(); i < n; ++i) {
-//	}
+	//	std::cout << "\n === TRIGGER PATHS === " << std::endl;
+	//	for (unsigned int i = 0, n = triggerBits->size(); i < n; ++i) {
+	//		cout << "Trigger " << names.triggerName(i) << std::endl;
+	//	}
 
 
-	bool isMC = true;
 	if(isMC) {
 
+		edm::Handle<edm::View<reco::GenParticle> > pruned;  
+		iEvent.getByLabel("prunedGenParticles",pruned); 
 		unsigned int Ngen = pruned->size();
 		indexmuTau = indexTauh = 0;
 		int muhad;
@@ -196,13 +205,15 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 				if(genP.isDirectPromptTauDecayProductFinalState()) {
 					//const reco::GenParticle &mom = genP.mother(0);				 
 					const reco::Candidate *Moth = genP.mother(0);
-					if(IsFirstCopy (Moth,15)) { 
+					if(IsFirstCopy (Moth,true)) { 
+						std::cout<<"IsFirstCopy:"<<std::endl;
 						muhad++;                
 						genmuinfo.SetPtEtaPhiM(genP.pt(),genP.eta(),genP.phi(),genP.mass());
 
 					} else {
 						const reco::Candidate *Moth1 = GetFirstCopy(Moth);
 						if(fabs(Moth1->pdgId()) == 15) {
+							std::cout<<"Getting first copy:"<<std::endl; 
 							muhad++;		
 							genmuinfo.SetPtEtaPhiM(genP.pt(),genP.eta(),genP.phi(),genP.mass());
 						} 
@@ -210,7 +221,11 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 				}
 			}
 		}
-		if(!(muhad == 1)) return;
+		std::cout<<"muhad:"<<muhad<<std::endl;
+		hNumberOfMuons->Fill(muhad);
+		hFillEventTotal->Fill(1);
+
+		//		if(!(muhad == 1)) return;
 		int itauh=0;
 		for (unsigned int iGen = 0; iGen < Ngen; iGen++)
 		{
@@ -231,14 +246,15 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 				}
 			}
 		}
-//		if(!(itauh == 1)) return;
+		hNumberOftaus->Fill(itauh);
+		hFillEventMuon->Fill(1);
+		//		if(!(itauh == 1)) return;
 	}
 
 
-
+	hFillEventTau->Fill(1); 
 	// NOW TRIGGER LEVEL INFORMATION
-
-	bool isData = false;
+	//  bool isData = false;
 	matchedTrigger1 = false;
 	matchedTrigger2 = false;
 
@@ -256,9 +272,12 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 		HLTPath3="HLT_DoubleMediumIsoPFTau40_Trk1_eta2p1_Reg_v1";
 		HLTFilter3a="hltDoublePFTau40TrackPt1MediumIsolationDz02Reg";
 		HLTFilter3b="hltDoublePFTau40TrackPt1MediumIsolationReg";
+		HLTPath4 = "HLT_IsoMu17_eta2p1_MediumIsoPFTau40_Trk1_eta2p1_Reg_v1";
+		HLTFilter4a = "hltL3crIsoL1sMu16erTauJet20erL1f0L2f10QL3f17QL3trkIsoFiltered0p09";
+		HLTFilter4b = "hltOverlapFilterIsoMu17MediumIsoPFTau40Reg";
 
 	}
-	else if(isData) {
+	else {
 
 
 		HLTPath1 = "HLT_IsoMu24_eta2p1_v2" ;                         
@@ -274,45 +293,70 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 		HLTFilter3a="hltDoublePFTau40TrackPt1MediumIsolationDz02Reg";
 		HLTFilter3b="hltDoublePFTau40TrackPt1MediumIsolationReg";
 
+		HLTPath4 = "HLT_IsoMu17_eta2p1_MediumIsoPFTau40_Trk1_eta2p1_Reg_v2";
+		HLTFilter4a = "hltL3crIsoL1sMu16erTauJet20erL1f0L2f10QL3f17QL3trkIsoFiltered0p09";
+		HLTFilter4b = "hltOverlapFilterIsoMu17MediumIsoPFTau40Reg";
+
 
 	}
 
+
+
+
+
+	int muonid = 0;
+	int muoniso = 0;
+	int tauid = 0;
+	int chargereq = 0;
+	int mtcut=0;
+	int pzeta=0;
+	int muonmatch = 0;
+	int taumatch1 = 0;
+	int taumatch2 = 0;
 	for (pat::MuonCollection::const_iterator myMuon = muons->begin(); myMuon != muons->end(); ++myMuon) {
 
-		if(myMuon->pt() > 17. && fabs(myMuon->eta()) < 2.1 && myMuon->isTightMuon(*firstGoodVertex)) { 
+		if(myMuon->pt() > 30. && fabs(myMuon->eta()) < 2.1 && myMuon->isTightMuon(*firstGoodVertex)) { 
 			float iso = ((myMuon->pfIsolationR03().sumChargedHadronPt + max(myMuon->pfIsolationR03().sumNeutralHadronEt  + myMuon->pfIsolationR03().sumPhotonEt - 0.5 * myMuon->pfIsolationR03().sumPUPt, 0.0))/myMuon->pt());
-
+			muonid++;
 
 			if(iso >= 0.1)  continue;
+			muoniso++;
 			// tau loop
 			for (pat::TauCollection::const_iterator myTau = taus->begin(); myTau != taus->end(); ++myTau) {                                                                                                   
 
-				if(myTau->pt() > 20. && fabs(myTau->eta()) < 2.3 && (myTau->tauID("decayModeFinding") > 0.5) && (myTau->tauID("againstMuonTight3") > 0.5) && (myTau->tauID("againstElectronVLooseMVA5") > 0.5 ) && (myTau->tauID("byCombinedIsolationDeltaBetaCorrRaw3Hits") < 1.5))  { 
-
+				if(myTau->pt() > 20. && fabs(myTau->eta()) < 2.1 && (myTau->tauID("decayModeFinding") > 0.5) && (myTau->tauID("againstMuonTight3") > 0.5) && (myTau->tauID("againstElectronVLooseMVA5") > 0.5 ) && (myTau->tauID(isowp) > 0.5))  { 
+					tauid++;
 					//pat::PackedCandidate const* packedLeadTauCand = dynamic_cast<pat::PackedCandidate const*>(src.leadChargedHadrCand().get());
 					if(deltaR(myMuon->p4(), myTau->p4()) <= 0.5) continue; 
 					if(!(myMuon->charge() * myTau->charge() == -1)) continue;
-					float myMT =  mTCalculation(*myMuon,MEt);
-					if(myMT >= 40. ) continue; 
+					chargereq++;
+					//					float myMT =  mTCalculation(*myMuon,MEt);
+					//					if(myMT >= 40. ) continue; 
+					if(!(cos(TMath::Abs(normalizedPhi(myMuon->phi() - myTau->phi())))< -0.95)) continue; 
+					mtcut++;
 					float PZETA = PZeta(*myMuon, *myTau, MEt);
 					float PZETAvis = PZetaVis(*myMuon, *myTau);
 					if(PZETA - 3.1*PZETAvis < -50) continue; 
-					if(!(dR(genmuinfo.Eta(), genmuinfo.Phi(),myMuon->eta(),myMuon->phi()) < 0.5)) continue;
-					if(!(dR(gentauinfo.Eta(), gentauinfo.Phi(),myTau->eta(),myTau->phi()) < 0.5)) continue;   
+					pzeta++;
+					//if(!(dR(genmuinfo.Eta(), genmuinfo.Phi(),myMuon->eta(),myMuon->phi()) < 0.5)) continue;
+					//if(!(dR(gentauinfo.Eta(), gentauinfo.Phi(),myTau->eta(),myTau->phi()) < 0.5)) continue;   
 					pair<bool, TLorentzVector> muonmatched;
-					muonmatched = MuonMatchingToTrigObjects(*myMuon,triggerObjects, names, HLTFilter2a, HLTPath2); 
+					muonmatched = MuonMatchingToTrigObjects(*myMuon,triggerObjects, names, HLTFilter1, HLTPath1); 
 					if(!(muonmatched.first)) continue;
 					//cout<<"got a muon"<<endl; 
-					pair<bool, TLorentzVector> taumatched; 
-					taumatched  = TauMatchingToTrigObjects(*myTau,triggerObjects, names, HLTFilter2c, HLTPath2,false); 
-					if(!(taumatched.first)) continue;
+					muonmatch++;
+					//					pair<bool, TLorentzVector> taumatched; 
+					//					taumatched  = TauMatchingToTrigObjects(*myTau,triggerObjects, names, HLTFilter2c, HLTPath2,false); 
+					//					if(!(taumatched.first)) continue;
+					//					taumatch1++;
 					//cout<<"got a tau"<<endl;
 					hFillPtDen->Fill(myTau->pt());
 					hFillEtaDen->Fill(myTau->eta());
 					pair<bool, TLorentzVector> taumatchedNum;
-					taumatchedNum  = TauMatchingToTrigObjects(*myTau,triggerObjects, names, HLTFilter3b, HLTPath2,true);
-//					//cout<<"result of numertaor"<<taumatchedNum.first<<endl;  
-                                        if(!(taumatchedNum.first)) continue;
+					taumatchedNum  = TauMatchingToTrigObjects(*myTau,triggerObjects, names, HLTFilter4b, HLTPath4,true);
+					//					//cout<<"result of numertaor"<<taumatchedNum.first<<endl;  
+					if(!(taumatchedNum.first)) continue;
+					taumatch2++;	
 					hFillPtNum->Fill(myTau->pt());
 					hFillEtaNum->Fill(myTau->eta());                                                                      
 
@@ -326,6 +370,15 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
 		}
 	}
+	if(muonid >= 1) hmuonid->Fill(1);
+	if(muoniso >= 1) hmuoniso->Fill(1);
+	if(tauid >= 1) htauid->Fill(1);
+	if(chargereq >= 1) hchargereq->Fill(1);
+	if(mtcut>=1) hmtcut->Fill(1);
+	if(pzeta>=1) hpzeta->Fill(1);
+	if(muonmatch >= 1) hmuonmatch->Fill(1);
+	if(taumatch1 >= 1) htaumatch1->Fill(1);
+	if(taumatch2 >= 1) htaumatch2->Fill(1);
 #ifdef THIS_IS_AN_EVENT_EXAMPLE
 	Handle<ExampleData> pIn;
 	iEvent.getByLabel("example",pIn);
@@ -346,7 +399,20 @@ TriggerEff::beginJob()
 	hFillPtNum = fs->make<TH1F>("hFillPtNum","hFillPtNum",500,0,500);
 	hFillEtaDen = fs->make<TH1F>("hFillEtaDen","hFillEtaDen",100,-5,5);
 	hFillEtaNum = fs->make<TH1F>("hFillEtaNum","hFillEtaNum",100,-5,5);
-
+	hNumberOfMuons = fs->make<TH1F>("hNumberOfMuons","hNumberOfMuons",10,0,10);
+	hNumberOftaus = fs->make<TH1F>("hNumberOftaus","hNumberOftaus",10,0,10);
+	hFillEventTotal = fs->make<TH1F>("hFillEventTotal","hFillEventTotal",2,0,2);
+	hFillEventMuon = fs->make<TH1F>("hFillEventMuon","hFillEventMuon",2,0,2);
+	hFillEventTau = fs->make<TH1F>("hFillEventTau","hFillEventTau",2,0,2);
+	hmuonid = fs->make<TH1F>("hmuonid","hmuonid",2,0,2);
+	hmuoniso = fs->make<TH1F>("hmuoniso","hmuoniso",2,0,2);
+	htauid = fs->make<TH1F>("htauid","htauid",2,0,2);
+	hchargereq = fs->make<TH1F>("hchargereq","hchargereq",2,0,2);
+	hmtcut = fs->make<TH1F>("hmtcut","hmtcut",2,0,2);
+	hpzeta = fs->make<TH1F>("hpzeta","hpzeta",2,0,2);
+	hmuonmatch = fs->make<TH1F>("hmuonmatch","hmuonmatch",2,0,2);
+	htaumatch1 = fs->make<TH1F>("htaumatch1","htaumatch1",2,0,2);
+	htaumatch2 = fs->make<TH1F>("htaumatch2","htaumatch2",2,0,2);
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
