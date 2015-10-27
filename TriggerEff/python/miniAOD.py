@@ -57,7 +57,10 @@ fileName = cms.string("OutTree.root")
 
 process.TNT = cms.EDAnalyzer("TriggerEff",
     # boolean variables
-    triggerResults      = cms.InputTag( 'TriggerResults', '', 'HLT' )
+    triggerResults      = cms.InputTag( 'TriggerResults', '', 'HLT' ),
+    isolation   = cms.string("byLooseCombinedIsolationDeltaBetaCorr3Hits"),
+#byTightIsolationMVA3newDMwLT"),
+    isMC = cms.bool(True)  
 )
 
 process.p = cms.Path(process.TNT)
