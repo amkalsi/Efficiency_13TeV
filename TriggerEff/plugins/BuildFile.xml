@@ -9,4 +9,8 @@
 <use name="CommonTools/UtilAlgos"/>
 <use name="DataFormats/HepMCCandidate"/>
 <use name="DataFormats/Candidate"/>
+<use name="SimDataFormats/GeneratorProducts"/>
+<use name="HLTrigger/HLTcore"/>
+<use name="HLTrigger/HLTcore"/>
+<use name="DataFormats/L1Trigger"/>
 <flags EDM_PLUGIN="1"/>
