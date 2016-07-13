@@ -396,8 +396,8 @@ TriggerEff::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 					if(GenReq ) if(!(dR(gentauinfo.Eta(), gentauinfo.Phi(),myTau->eta(),myTau->phi()) < 0.5)) continue;  
 					if(ExtraMuon(*myMuon, muons, *firstGoodVertex)) continue; 
 	
-					if(!(( myTau->p4()+myMuon->p4()).M() > 40.)) continue;
-					if(!(( myTau->p4()+myMuon->p4()).M() < 80.)) continue;
+//					if(!(( myTau->p4()+myMuon->p4()).M() > 40.)) continue;
+//					if(!(( myTau->p4()+myMuon->p4()).M() < 80.)) continue;
 					/////////////////////////////// extra electron lepton /////////////////
 					iselectron=false;
 					int nElec=0;
